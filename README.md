@@ -2,7 +2,7 @@
 
 **Version:** 1.0.0
 
-[![Build Status](https://dev.azure.com/osieng/engineering/_apis/build/status/product-readiness/OMF/aveva.sample-omf-temperature_sensor-python?branchName=main)](https://dev.azure.com/osieng/engineering/_build/latest?definitionId=2641&branchName=main)
+[![Build Status](https://dev.azure.com/AVEVA-VSTS/Cloud%20Platform/_apis/build/status%2Fproduct-readiness%2FCONNECT%2FAVEVA.sample-omf-temperature_sensor-python-omf-20?repoName=AVEVA%2Fsample-omf-temperature_sensor-python-omf-20&branchName=main)](https://dev.azure.com/AVEVA-VSTS/Cloud%20Platform/_build/latest?definitionId=25018&repoName=AVEVA%2Fsample-omf-temperature_sensor-python-omf-20&branchName=main)
 
 This sample uses Open Message Format version 2.0 to send random sample values, assets and events to CONNECT (EAP or CDS), Edge Data Store, and/or PI Web API. As of now (last updated August 2026) OMF 2.0 is only supported in CONNECT EAP. The sample includes the code to send to all endpoints for the future, but only CONNECT EAP will work today. Once the sample is started, the assets are created, then the sample periodically collects (or generates) values for temperature until it reaches a specified number of values. At each interval it then sends that data to each of the configured OMF endpoints. It checks the value of the temperature sensor against a configured threshold. It will start and stop events based on where the value falls in the configured threshold and send those updates to each endpoint.
 

@@ -1,5 +1,5 @@
 version: '1'
-serverUrl: https://osisoft.polaris.synopsys.com
+serverUrl: ${env.POLARIS_URL}
 install:
   coverity:
     version: default
@@ -10,6 +10,8 @@ project:
   revision:
     name: ${scm.git.commit}
     date: ${scm.git.commit.date}
+  groups:
+    .RnD.Polaris.Guild-Product-Readiness: Administrator
 capture:
   fileSystem:
     python:

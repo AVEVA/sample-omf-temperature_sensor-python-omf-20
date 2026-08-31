@@ -1,3 +1,8 @@
+variables:
+  - group: PRG-dev-automation
+  - name: analysisProject
+    value: sample-omf-temperature_sensor-python-omf-20
+
 trigger:
   batch: true
   branches:
@@ -9,156 +14,79 @@ pr:
     include:
       - main
 
+schedules:
+  - cron: '0 0 * * 0'
+    displayName: Weekly build
+    branches:
+      include:
+        - main
+    always: true
+
 resources:
   repositories:
+    - repository: ArchitectureRepo
+      type: git
+      name: Architecture/Architecture
+      ref: refs/heads/main
     - repository: templates
       type: github
-      name: AVEVA/AVEVA-Samples
+      name: AVEVA/pipelines-templates
       endpoint: AVEVA
-
-parameters:
-  - name: poolADH
-    default: DevOps-Managed-Ubt22-Mdp
-  - name: containerDemandsADH
-    type: object
-    default: ['Agent.OS -equals Linux']
-  - name: poolPI
-    default: DevOps-Managed-Ubt22-Mdp
-  - name: containerDemandsPI
-    type: object
-    default: ['Agent.OS -equals Linux']
-  - name: poolEDS
-    default: DevOps-Managed-Ubt22-Mdp
-  - name: containerDemandsEDS
-    type: object
-    default: ['PYTHON']
+    - repository: antiMalwareTemplate
+      name: Architecture/Architecture 
+      ref: refs/heads/antiMalwareVersions/0.1
+      type: git
 
 jobs:
-  - job: Tests_ADH
+# --- ADDING TESTS JOB ---
+
+  - job: Tests
+    condition: ne(variables['Build.Reason'], 'Schedule')
     pool:
-      name: ${{ parameters.poolADH }}
-      demands: ${{ parameters.containerDemandsADH }}
-    variables:
-      - name: Endpoints.0.Selected
-        value: true
-      - name: Endpoints.1.Selected
-        value: false
-      - name: Endpoints.2.Selected
-        value: false
-      - name: Endpoints.0.TenantId
-        value: $(TenantId)
-      - name: Endpoints.0.NamespaceId
-        value: $(NamespaceId)
-      - name: Endpoints.0.ClientId
-        value: $(ClientId)
-      - name: Endpoints.0.ClientSecret
-        value: $(ClientSecret)
-      - name: Endpoints.0.Resource
-        value: $(Resource)
+      name: Cloud Platform CONNECT v2 Development
     steps:
-      - template: '/miscellaneous/build_templates/appsettings.yml@templates'
-        parameters:
-          secrets: 'TenantId, NamespaceId, ClientId, ClientSecret, Resource'
+      - task: DownloadSecureFile@1
+        name: downloadAppSettings
+        displayName: 'Download secure appsettings'
+        inputs:
+          secureFile: 'PRG-CONNECT_Prod_AVEVA-Lighthouse-OMF.appsettings.json'
+
+      - pwsh: |
+          $source = "$(downloadAppSettings.secureFilePath)"
+          $destination = Join-Path "$(Build.SourcesDirectory)" "appsettings.json"
+          Copy-Item -Path $source -Destination $destination -Force
+          Write-Host "Placed appsettings.json next to program.py"
+        displayName: 'Place appsettings.json'
 
       - script: |
-          echo Install tools
-          pip install setuptools wheel
-          pip install unittest-xml-reporting    
+          echo Install test tools   
           pip install pytest
-          pip install pytest-cov
           echo Install requirements
           pip install -r requirements.txt
           echo Run tests
-          python -m pytest ./test.py --junitxml=junit/test-results.xml 
+          python -m pytest --junitxml=junit/test-results.xml ./test.py
           echo Complete
         displayName: 'Run tests'
-
       - task: PublishTestResults@2
-        condition: succeededOrFailed()
         inputs:
           testResultsFiles: '**/test-*.xml'
           failTaskOnFailedTests: true
           testRunTitle: '$(Agent.JobName) on $(Agent.OS)'
         displayName: 'Publish test results'
+        condition: always()
 
-  - job: Tests_PI
-    pool:
-      name: ${{ parameters.poolPI }}
-      demands: ${{ parameters.containerDemandsPI }}
-    variables:
-      - name: Endpoints.0.Selected
-        value: false
-      - name: Endpoints.1.Selected
-        value: false
-      - name: Endpoints.2.Selected
-        value: true
-      - name: Endpoints.2.Resource
-        value: $(PIWebAPI)
-      - name: Endpoints.2.Username
-        value: $(Username)
-      - name: Endpoints.2.Password
-        value: $(Password)
-      - name: Endpoints.2.DataArchiveName
-        value: $(DataArchiveName)
-      - name: Endpoints.2.VerifySSL
-        value: false
-    steps:
-      - template: '/miscellaneous/build_templates/appsettings.yml@templates'
-        parameters:
-          secrets: 'Username, Password, PIWebAPI, DataArchiveName'
+    # --- END TESTS JOB ---
 
-      - script: |
-          echo Install tools
-          pip install setuptools wheel
-          pip install unittest-xml-reporting    
-          pip install pytest
-          pip install pytest-cov
-          echo Install requirements
-          pip install -r requirements.txt
-          echo Run tests
-          python -m pytest ./test.py --junitxml=junit/test-results.xml 
-          echo Complete
-        displayName: 'Run tests'
-
-      - task: PublishTestResults@2
-        condition: succeededOrFailed()
-        inputs:
-          testResultsFiles: '**/test-*.xml'
-          failTaskOnFailedTests: true
-          testRunTitle: '$(Agent.JobName) on $(Agent.OS)'
-        displayName: 'Publish test results'
-
-  - job: Tests_EDS
-    pool:
-      name: ${{ parameters.poolEDS }}
-      demands: ${{ parameters.containerDemandsEDS }}
-    variables:
-      - name: Endpoints.0.Selected
-        value: false
-      - name: Endpoints.1.Selected
-        value: true
-      - name: Endpoints.2.Selected
-        value: false
-    steps:
-      - template: '/miscellaneous/build_templates/appsettings.yml@templates'
-
-      - script: |
-          echo Install tools
-          pip install setuptools wheel
-          pip install unittest-xml-reporting    
-          pip install pytest
-          pip install pytest-cov
-          echo Install requirements
-          pip install -r requirements.txt
-          echo Run tests
-          python -m pytest ./test.py --junitxml=junit/test-results.xml 
-          echo Complete
-        displayName: 'Run tests'
-
-      - task: PublishTestResults@2
-        condition: succeededOrFailed()
-        inputs:
-          testResultsFiles: '**/test-*.xml'
-          failTaskOnFailedTests: true
-          testRunTitle: '$(Agent.JobName) on $(Agent.OS)'
-        displayName: 'Publish test results'
+  - template: '/code-analysis/code-analysis.yml@templates'
+    parameters:
+      poolForExecution: Cloud Platform CONNECT v2 Development
+      useRequirementsTxt: true
+      buildSteps:
+        - script: |
+            echo "Installing Python dependencies"
+            python -c "import sys; print(sys.executable)"
+            python -m pip --version
+            python -m pip install --upgrade pip
+            python -m pip install -r requirements.txt
+            python -m pip freeze
+          displayName: 'Install Python dependencies'

@@ -1,5 +1,21 @@
+'''
+Copyright 2018-2026 AVEVA Group Limited
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+SPDX-License-Identifier: Apache-2.0
+'''
+
 # NOTE: this script uses the v2.0 version of the OMF specification.
-# Reference: https://docs.aveva.com/bundle/omf/page/1283983.html
 # *************************************************************************************
 
 # ************************************************************************
@@ -26,7 +42,7 @@ EVENT_ID = 'Sample.Script.SL6658.TemperatureEvent'
 # List of possible endpoint types
 class EndpointTypes(enum.Enum):
     CDS = 'CDS'
-    NEXTGENCDS = 'NextGenCDS'
+    CONNECTEAP = 'CONNECTEAP'
     EDS = 'EDS'
     PI = 'PI'
 
@@ -38,15 +54,15 @@ def get_token(endpoint):
 
     endpoint_type = endpoint["EndpointType"]
     # return an empty string for endpoints that don't use bearer tokens
-    if endpoint_type not in (EndpointTypes.CDS, EndpointTypes.NEXTGENCDS):
+    if endpoint_type not in (EndpointTypes.CDS, EndpointTypes.CONNECTEAP):
         return ''
 
     if (('expiration' in endpoint) and (endpoint["expiration"] - time.time()) > 5 * 60):
         return endpoint["token"]
 
-    # NextGenCDS provides the token URL directly in the endpoint config; no discovery needed.
-    if endpoint_type == EndpointTypes.NEXTGENCDS:
-        token_url = urlparse(endpoint["TokenUrl"])
+    # CONNECTEAP provides the token URL directly in the endpoint config; no discovery needed.
+    if endpoint_type == EndpointTypes.CONNECTEAP:
+        token_url = urlparse(endpoint["TokenEndpoint"])
         # Validate URL
         assert token_url.scheme == 'https'
 
@@ -109,11 +125,11 @@ def send_message_to_omf_endpoint(endpoint, message_type, message_omf_json, actio
     # Collect the message headers
     msg_headers = get_headers(endpoint, compression, message_type, action)
 
-    # Send message to Cds endpoint
+    # Send message to CDS endpoint
     endpoints_type = endpoint["EndpointType"]
     response = {}
-    # If the endpoint is Cds or NextGenCDS (both use bearer-token + HTTPS POST)
-    if endpoints_type in (EndpointTypes.CDS, EndpointTypes.NEXTGENCDS):
+    # If the endpoint is CDS or CONNECTEAP (both use bearer-token + HTTPS POST)
+    if endpoints_type in (EndpointTypes.CDS, EndpointTypes.CONNECTEAP):
         response = requests.post(
             endpoint["OmfEndpoint"],
             headers=msg_headers,
@@ -178,8 +194,8 @@ def get_headers(endpoint, compression='', message_type='', action=''):
     if(compression == 'gzip'):
         msg_headers["compression"] = 'gzip'
 
-    # If the endpoint is Cds or NextGenCDS, attach the bearer token
-    if endpoint_type in (EndpointTypes.CDS, EndpointTypes.NEXTGENCDS):
+    # If the endpoint is CDS or CONNECTEAP, attach the bearer token
+    if endpoint_type in (EndpointTypes.CDS, EndpointTypes.CONNECTEAP):
         msg_headers["Authorization"] = f'Bearer {get_token(endpoint)}'
     # If the endpoint is PI
     elif endpoint_type == EndpointTypes.PI:
@@ -464,24 +480,6 @@ def get_random_value():
     return str(value)
 
 
-def get_sensor_value(sensor_url):
-    """Simple data collection logic"""
-    try:
-        response = requests.get(sensor_url)
-
-        if (response.status_code == 200):
-            decodedResponse = response.content.decode("utf-8")
-            xmlRoot = ET.fromstring(decodedResponse)
-            temperatureValue = xmlRoot.find('temperature').text
-            print("Sensor value: ", temperatureValue)
-            return temperatureValue
-        else:
-            return ERROR_STRING
-    except Exception as ex:
-        print(("Encountered Error: {error}".format(error=ex)))
-        return ERROR_STRING
-
-
 def get_current_time():
     """Returns the current time in UTC format"""
     # datetime.utcnow() is deprecated since Python 3.12; use a timezone-aware UTC value instead.
@@ -522,21 +520,20 @@ def get_appsettings():
             endpoint["EndpointType"] = EndpointTypes(endpoint["EndpointType"])
             endpoint_type = endpoint["EndpointType"]
 
-        # If the endpoint is Cds
+        # If the endpoint is CDS
         if endpoint_type == EndpointTypes.CDS:
             base_endpoint = f'{endpoint["Resource"]}/api/{endpoint["ApiVersion"]}' + \
                 f'/tenants/{endpoint["TenantId"]}/namespaces/{endpoint["NamespaceId"]}'
             omf_endpoint = f'{base_endpoint}/omf'
 
-        # If the endpoint is NextGenCDS, the OMF endpoint URL is supplied directly in config
-        # (no Resource/Tenant/Namespace path construction needed). Accept either OMFEndpoint
-        # or OmfEndpoint key casing for convenience.
-        elif endpoint_type == EndpointTypes.NEXTGENCDS:
-            omf_endpoint = endpoint.get("OmfEndpoint") or endpoint.get("OMFEndpoint")
+        # If the endpoint is CONNECTEAP, the OMF endpoint URL is supplied directly in config
+        # (no Resource/Tenant/Namespace path construction needed)
+        elif endpoint_type == EndpointTypes.CONNECTEAP:
+            omf_endpoint = endpoint.get("Endpoint")
             if not omf_endpoint:
-                raise ValueError('NextGenCDS endpoint requires an "OMFEndpoint" value')
-            if not endpoint.get("TokenUrl"):
-                raise ValueError('NextGenCDS endpoint requires a "TokenUrl" value')
+                raise ValueError('CONNECTEAP endpoint requires an "Endpoint" value')
+            if not endpoint.get("TokenEndpoint"):
+                raise ValueError('CONNECTEAP endpoint requires a "TokenEndpoint" value')
             base_endpoint = omf_endpoint
 
         # If the endpoint is EDS
@@ -588,11 +585,9 @@ def main(test=False):
         print(' "Y88888P"  888       888 888      88888888 888           888     ')
         print('------------------------------------------------------------------')
 
-        # Sensor configuration
+        # Configuration
         appsettings = get_appsettings()
         endpoints = appsettings.get('Endpoints')
-        useRandom = appsettings.get('UseRandom')
-        sensorUrl = appsettings.get('SensorUrl')
 
         # Scanning configuration
         iterationCount = (int)(
@@ -603,7 +598,10 @@ def main(test=False):
         for endpoint in endpoints:
             if not endpoint["Selected"]:
                 continue
-            
+            if endpoint["EndpointType"] in ["CDS","EDS","PI"]:
+                print(f"Endpoint type {endpoint["EndpointType"]} not yet supported for OMF 2.X. Use OMF 1.X samples instead. Skipping endpoint.")
+                continue
+
             one_time_send_creates(endpoint)
 
             count = 0
@@ -612,15 +610,12 @@ def main(test=False):
             open_event = None  # dict with keys: id, condition, message, severity, starttime
             time.sleep(1)
             while count == 0 or ((not test) and count < iterationCount):
-                # Use get_sensor_value() method when HW sensor is available or get_random_value() method to
+                # Use get_random_value() method to
                 # generate random value for demonstration purposes.
-                if (useRandom):
-                    measurement = get_random_value()
-                else:
-                    measurement = get_sensor_value(sensorUrl)
+                measurement = get_random_value()
 
                 if(measurement == ERROR_STRING):
-                    print('Unable to get data from the sensor...')
+                    print('Unable to get data...')
                 else:
                     value = int(measurement)/10
                     print("Sending value: ", value)

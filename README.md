@@ -1,10 +1,10 @@
-# Temperature Sensor OMF Python Sample
+# Temperature Sensor OMF 2.0 Python Sample
 
-**Version:** 1.3.0
+**Version:** 1.0.0
 
-[![Build Status](https://dev.azure.com/osieng/engineering/_apis/build/status/product-readiness/OMF/aveva.sample-omf-temperature_sensor-python?branchName=main)](https://dev.azure.com/osieng/engineering/_build/latest?definitionId=2641&branchName=main)
+[![Build Status](https://dev.azure.com/AVEVA-VSTS/Cloud%20Platform/_apis/build/status%2Fproduct-readiness%2FCONNECT%2FAVEVA.sample-omf-temperature_sensor-python-omf-20?repoName=AVEVA%2Fsample-omf-temperature_sensor-python-omf-20&branchName=main)](https://dev.azure.com/AVEVA-VSTS/Cloud%20Platform/_build/latest?definitionId=25018&repoName=AVEVA%2Fsample-omf-temperature_sensor-python-omf-20&branchName=main)
 
-This sample uses Open Message Format to send real time data from a temperature sensor (or random sample values) to AVEVA Data Hub, Edge Data Store, and/or PI Web API. Once the sample is started, the sample periodically collects (or generates) values for temperature until it reaches a specified number of values. At each interval it then sends that data to each of the configured OMF endpoints.
+This sample uses Open Message Format version 2.0 to send random sample values, assets and events to CONNECT (EAP or CDS), Edge Data Store, and/or PI Web API. As of now (last updated August 2026) OMF 2.0 is only supported in CONNECT EAP. The sample includes the code to send to all endpoints for the future, but only CONNECT EAP will work today. Once the sample is started, the assets are created, then the sample periodically collects (or generates) values for temperature until it reaches a specified number of values. At each interval it then sends that data to each of the configured OMF endpoints. It checks the value of the temperature sensor against a configured threshold. It will start and stop events based on where the value falls in the configured threshold and send those updates to each endpoint.
 
 ## To run this sample:
 
@@ -36,20 +36,18 @@ The application can be configured to send to any number of endpoints specified i
 
 An OMF ingress client must be configured. On our [AVEVA Learning](https://www.youtube.com/channel/UC333r4jIeHaY-rGgMjON54g) Channel on YouTube we have a video on [Creating an OMF Connection](https://www.youtube.com/watch?v=52lAnkGC1IM).
 
-The format of the configuration for a Cds endpoint is shown below along with descriptions of each parameter. Replace all parameters with appropriate values.
+The format of the configuration for a CONNECTEAP endpoint is shown below along with descriptions of each parameter. Replace all parameters with appropriate values.
 
 ```json
 {
   "Selected": true,
-  "EndpointType": "CDS",
-  "Resource": "https://uswe.datahub.connect.aveva.com",
-  "NamespaceId": "PLACEHOLDER_REPLACE_WITH_NAMESPACE_ID",
-  "Tenant": "PLACEHOLDER_REPLACE_WITH_TENANT_ID",
-  "clientId": "PLACEHOLDER_REPLACE_WITH_CLIENT_ID",
+  "EndpointType": "CONNECTEAP",
+  "ClientId": "PLACEHOLDER_REPLACE_WITH_CLIENT_ID",
   "ClientSecret": "PLACEHOLDER_REPLACE_WITH_CLIENT_SECRET",
-  "ApiVersion": "v1",
+  "TokenEndpoint": "https://identity.platform.connect.aveva.com/account/<accountid>/authentication/connect/token",
+  "Endpoint": "https://platform.connect.aveva.com/api/account/<accountid>/omfIngress/<omfIngressId>/v1/messages",
   "VerifySSL": true,
-  "UseCompression": false,
+  "UseCompression": true,
   "WebRequestTimeoutSeconds": 30
 }
 ```
